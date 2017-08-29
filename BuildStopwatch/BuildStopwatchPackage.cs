@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.Win32;
+using EnvDTE;
 
 namespace BuildStopwatch
 {
@@ -33,8 +34,11 @@ namespace BuildStopwatch
     [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)] // Info on this package for Help/About
     [Guid(BuildStopwatchPackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
+    [ProvideAutoLoad(UIContextGuids80.SolutionBuilding)]
     public sealed class BuildStopwatchPackage : Package
     {
+        private Stopwatch _stopwatch;
+
         /// <summary>
         /// BuildStopwatchPackage GUID string.
         /// </summary>
@@ -51,8 +55,6 @@ namespace BuildStopwatch
             // initialization is the Initialize method.
         }
 
-        #region Package Members
-
         /// <summary>
         /// Initialization of the package; this method is called right after the package is sited, so this is the place
         /// where you can put all the initialization code that rely on services provided by VisualStudio.
@@ -60,8 +62,37 @@ namespace BuildStopwatch
         protected override void Initialize()
         {
             base.Initialize();
+
+            var _dte = (DTE)GetService(typeof(SDTE));
+            _dte.Events.BuildEvents.OnBuildBegin += OnBuildBegin;
+            _dte.Events.BuildEvents.OnBuildDone += OnBuildDone;
         }
 
-        #endregion
+        private void WriteToBuildPane(string message)
+        {
+            var outputWindow = Package.GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+
+            Guid generalPaneGuid = VSConstants.GUID_BuildOutputWindowPane;
+            IVsOutputWindowPane generalPane;
+
+            outputWindow.GetPane(ref generalPaneGuid, out generalPane);
+
+            generalPane.OutputString(message);
+            generalPane.Activate();
+        }
+
+        private void OnBuildBegin(vsBuildScope Scope, vsBuildAction Action)
+        {
+            _stopwatch = Stopwatch.StartNew();
+        }
+
+        private void OnBuildDone(vsBuildScope Scope, vsBuildAction Action)
+        {
+            if (_stopwatch != null)
+            {
+                _stopwatch.Stop();
+                WriteToBuildPane("\n--- Elapsed build time: " + _stopwatch.Elapsed + " ---");
+            }
+        }
     }
 }
